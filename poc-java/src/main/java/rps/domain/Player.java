@@ -31,6 +31,6 @@ public final class Player {
 
     @Override
     public String toString() {
-        return "P" + id + " (" + score() + ")";
+        return "P#" + id + " (" + score() + ")";
     }
 }
