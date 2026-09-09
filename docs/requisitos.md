@@ -26,9 +26,14 @@ tamanho do `ExecutorService`, e a formulação original ("número de threads de
 match") vale ao pé da letra. Em .NET o thread pool é global e o mesmo requisito
 teria de ser reescrito como "T tasks concorrentes", limitadas por um
 `SemaphoreSlim`. O texto acima foi generalizado para **partidas simultâneas**,
-que é o que o requisito realmente quer dizer nas duas stacks. Como a stack
-escolhida foi Java ([ADR-003](decisoes.md#adr-003)), a implementação é o tamanho
-do pool.
+que é o que o requisito realmente quer dizer nas duas stacks.
+
+Na primeira versão o limite era *só* o tamanho do pool — e por isso o requisito
+não era cumprido de fato: `pool.submit()` não bloqueia, então o orquestrador
+pareava a fila inteira de uma vez e as partidas excedentes esperavam escondidas
+dentro do executor. Quem limita hoje é um `Semaphore(T)` segurando o
+pareamento; o pool ficou só como provedor de threads — o que aproxima a stack
+Java da formulação que o .NET exigiria. Ver [ADR-011](decisoes.md#adr-011).
 
 **RF06 — empate é por rodada, não por partida.** Uma partida é uma sequência de
 rodadas que só termina quando uma delas é decidida; o histórico completo fica em

@@ -3,6 +3,7 @@ package rps.concurrency;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 import rps.domain.Match;
 import rps.domain.MatchResult;
@@ -18,17 +19,20 @@ public final class MatchRunner implements Runnable {
     private final EventBus bus;
     private final Set<Match> activeMatches;
     private final long roundDelayMs;
+    private final Semaphore slots;
 
     public MatchRunner(Match match,
                        PlayerQueue queue,
                        EventBus bus,
                        Set<Match> activeMatches,
-                       long roundDelayMs) {
+                       long roundDelayMs,
+                       Semaphore slots) {
         this.match = match;
         this.queue = queue;
         this.bus = bus;
         this.activeMatches = activeMatches;
         this.roundDelayMs = roundDelayMs;
+        this.slots = slots;
     }
 
     @Override
@@ -69,6 +73,12 @@ public final class MatchRunner implements Runnable {
             bus.publish(new Events.QueueChanged(queue.snapshot(), queue.alive()));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            // Devolve a vaga so aqui, depois de o vencedor ja estar de volta na
+            // fila: quando o orquestrador acordar, a fila que ele le e a real.
+            // No finally para que um match interrompido nao vaze a permissao e
+            // encolha as partidas simultaneas pro resto do torneio.
+            slots.release();
         }
     }
 }
