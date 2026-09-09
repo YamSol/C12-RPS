@@ -13,6 +13,8 @@ import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
@@ -30,19 +32,19 @@ public final class MainApp extends Application {
 
     private final QueuePanel queuePanel = new QueuePanel();
     private final ArenaPanel arenaPanel = new ArenaPanel();
+    private final ScaleLegend legend = new ScaleLegend();
     private final Label status = new Label("pronto");
     private final Spinner<Integer> playersSpinner = new Spinner<>(2, 500, 60);
     private final Spinner<Integer> threadsSpinner = new Spinner<>(1, 64, 4);
     private final Button startButton = new Button("start");
 
     private Tournament tournament;
-    private int maxScore = 1;
 
     @Override
     public void start(Stage stage) {
         BorderPane root = new BorderPane();
         root.setTop(controls());
-        root.setLeft(queuePanel);
+        root.setLeft(leftColumn());
         root.setCenter(arenaPanel);
         root.setBottom(statusBar());
         root.setBackground(new Background(new BackgroundFill(Color.web("#0e1116"), CornerRadii.EMPTY, Insets.EMPTY)));
@@ -57,6 +59,13 @@ public final class MainApp extends Application {
             }
         });
         stage.show();
+    }
+
+    /** Fila em cima, legenda da escala (#15) embaixo — a fila cresce, a legenda nao. */
+    private VBox leftColumn() {
+        VBox box = new VBox(queuePanel, legend);
+        VBox.setVgrow(queuePanel, Priority.ALWAYS);
+        return box;
     }
 
     private HBox controls() {
@@ -92,7 +101,6 @@ public final class MainApp extends Application {
         if (tournament != null) {
             tournament.stop();
         }
-        maxScore = 1;
 
         // Platform::runLater e o unico ponto de acoplamento com JavaFX na
         // camada de concorrencia — trocar de GUI troca so este Executor.
@@ -101,6 +109,14 @@ public final class MainApp extends Application {
 
         TournamentConfig config = new TournamentConfig(
                 playersSpinner.getValue(), threadsSpinner.getValue(), 350);
+
+        // RF07 / ADR-012: a escala sai de N e vale do start ao fim. Fixar aqui,
+        // antes de tournament.start(), porque o start ja publica QueueChanged.
+        ColorScale scale = ColorScale.forPlayers(config.players());
+        queuePanel.scale(scale);
+        arenaPanel.scale(scale);
+        legend.show(scale);
+
         tournament = new Tournament(config, bus);
 
         startButton.setDisable(true);
@@ -110,22 +126,20 @@ public final class MainApp extends Application {
 
     private void wire(EventBus bus) {
         bus.subscribe(Events.QueueChanged.class, event -> {
-            queuePanel.update(event.waiting(), event.alive(), maxScore);
-            arenaPanel.refreshAll(maxScore);
+            queuePanel.update(event.waiting(), event.alive());
+            arenaPanel.refreshAll();
         });
-        bus.subscribe(Events.MatchStarted.class, event -> arenaPanel.add(event.match(), maxScore));
+        bus.subscribe(Events.MatchStarted.class, event -> arenaPanel.add(event.match()));
         bus.subscribe(Events.RoundPlayed.class, event -> {
             MatchView view = arenaPanel.view(event.match());
             if (view != null) {
-                view.refresh(maxScore);
+                view.refresh();
             }
         });
-        bus.subscribe(Events.MatchEnded.class, event -> arenaPanel.remove(event.match(), maxScore));
-        bus.subscribe(Events.PlayerScored.class, event -> {
-            if (event.score() > maxScore) {
-                maxScore = event.score(); // renormaliza o gradiente (RF07)
-            }
-        });
+        bus.subscribe(Events.MatchEnded.class, event -> arenaPanel.remove(event.match()));
+        // PlayerScored nao tem mais assinante na UI: a escala e fixa, entao nao
+        // ha o que renormalizar quando alguem pontua. O evento continua sendo
+        // publicado — as metricas da #5 vao precisar dele.
         bus.subscribe(Events.TournamentEnded.class, event -> { // UC06
             startButton.setDisable(false);
             status.setText(event.champion() == null

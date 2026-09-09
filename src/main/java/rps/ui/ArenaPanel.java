@@ -23,6 +23,9 @@ public final class ArenaPanel extends GridPane {
 
     private final Map<Integer, MatchView> views = new LinkedHashMap<>();
 
+    /** Fixa no start (ADR-012); o default so evita NPE antes do primeiro torneio. */
+    private ColorScale scale = ColorScale.forPlayers(2);
+
     public ArenaPanel() {
         setHgap(8);
         setVgap(8);
@@ -30,26 +33,30 @@ public final class ArenaPanel extends GridPane {
         setBackground(new Background(new BackgroundFill(Color.web("#0e1116"), CornerRadii.EMPTY, Insets.EMPTY)));
     }
 
-    public void add(Match match, int maxScore) {
-        views.put(match.id(), new MatchView(match, maxScore));
-        relayout(maxScore);
+    public void scale(ColorScale scale) {
+        this.scale = scale;
     }
 
-    public void remove(Match match, int maxScore) {
+    public void add(Match match) {
+        views.put(match.id(), new MatchView(match, scale));
+        relayout();
+    }
+
+    public void remove(Match match) {
         views.remove(match.id());
-        relayout(maxScore);
+        relayout();
     }
 
     /** Repinta todos (score de alguem pode ter mudado). */
-    public void refreshAll(int maxScore) {
-        views.values().forEach(view -> view.refresh(maxScore));
+    public void refreshAll() {
+        views.values().forEach(MatchView::refresh);
     }
 
     public MatchView view(Match match) {
         return views.get(match.id());
     }
 
-    private void relayout(int maxScore) {
+    private void relayout() {
         getChildren().clear();
         getColumnConstraints().clear();
         getRowConstraints().clear();
@@ -76,7 +83,7 @@ public final class ArenaPanel extends GridPane {
 
         int i = 0;
         for (MatchView view : views.values()) {
-            view.refresh(maxScore);
+            view.refresh();
             view.setMaxWidth(Double.MAX_VALUE);
             view.setMaxHeight(Double.MAX_VALUE);
             GridPane.setHgrow(view, Priority.ALWAYS);

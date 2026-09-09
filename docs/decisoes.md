@@ -269,3 +269,52 @@ paralelismo efetivo é T-1 nesse instante — sem perda real, porque não há do
 jogadores disponíveis para preencher a vaga de qualquer forma. Verificado: T
 respeitado exatamente para T=1, 2, 4 e 8, e terminação sem deadlock em N/T
 extremos (N=2 T=8, N=3 T=1, N=500 T=64, N ímpar) e em 25 execuções repetidas.
+
+---
+
+## ADR-012 — Escala de cor discreta, dimensionada por `log2(N)` e fixada no start
+
+**Data:** 2026-09-09 · **Status:** aceita
+
+**Contexto.** O RF07 estava implementado como gradiente contínuo de matiz sobre
+`score / maxScore`, com `maxScore` renormalizado a cada `PlayerScored`. Três
+problemas: (1) a cor de um mesmo score mudava durante o torneio, porque o
+denominador crescia — um jogador com 3 vitórias ficava verde no início e azul
+depois, sem ter perdido nada; (2) scores adjacentes viravam matizes vizinhos,
+indistinguíveis num chip de 28×28; (3) a rampa azul→ciano→verde→amarelo→vermelho
+tem luminância desigual, então o amarelo do meio saltava mais que o vermelho do
+topo, e é a pior rampa possível para deuteranopia/protanopia.
+
+**Decisão.** Escala **discreta**, com `ceil(log2(N)) + 2` níveis calculados uma
+vez no start e imutáveis durante o torneio. Um nível por ponto de score; score
+acima do topo satura no último nível. Rampa Viridis, monotônica em luminância.
+
+**Por quê `log2(N)`.** Cada partida elimina um jogador, então o campeão vence da
+ordem de `log2(N)` partidas. Medido em 40 execuções por N, o score máximo real
+estoura esse teto em 2–7% das vezes, sempre por **exatamente +1** — a fila FIFO
+não é perfeitamente síncrona, então alguém eventualmente joga mais que o
+esperado. Daí a margem de +2, que cobriu todos os N testados (2 a 500) sem
+saturar. O teto é preso em `[3, 12]`: abaixo de 3 não há escala, acima de 12 os
+níveis deixam de ser distinguíveis a olho.
+
+**Por quê fixar no start.** É o que faz a cor significar "quão forte é este
+jogador" em vez de "quão forte ele é comparado ao líder de agora". Como efeito
+colateral, `maxScore` sai das assinaturas de `QueuePanel`, `ArenaPanel` e
+`MatchView`: a escala é injetada uma vez e some do caminho de desenho.
+
+**Detalhe de implementação.** `ceil(log2)` sai de
+`32 - Integer.numberOfLeadingZeros(n - 1)`, não de `Math.log(n)/Math.log(2)`:
+em potência de 2 o ponto flutuante erra por epsilon e o `ceil` devolve um nível a
+mais ou a menos.
+
+**Alternativas descartadas.** Faixas por quantil sobre a distribuição viva de
+scores — recalcular durante o torneio traz de volta exatamente o problema que
+esta ADR resolve. Escala logarítmica — com no máximo ~11 níveis não há o que
+comprimir. Manter o gradiente contínuo e só aumentar a saturação — não resolve
+nem a instabilidade nem o daltonismo.
+
+**Consequência.** A cor do campeão não é mais garantidamente o topo da rampa: com
+a margem de +2, um torneio típico termina um ou dois níveis abaixo do amarelo.
+É o preço de nunca faltar cor, e é preferível ao inverso (saturar cedo e achatar
+os melhores jogadores todos na mesma cor). A legenda ([#15](https://github.com/YamSol/C12-RPS/issues/15))
+existe porque uma escala fixa só é legível com o mapa cor→score à vista.
