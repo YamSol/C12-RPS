@@ -227,3 +227,45 @@ missing"*.
 **Consequência.** Duas classes onde deveria haver uma. É atrito de toolchain do
 JavaFX, não escolha de desenho — registrado aqui para ninguém "simplificar" e
 quebrar a execução.
+
+---
+
+## ADR-011 — `Semaphore(T)` limita as partidas simultâneas, não o tamanho do pool
+
+**Data:** 2026-09-09 · **Status:** aceita
+
+**Contexto.** O orquestrador entregava cada par com `pool.submit()` e confiava
+no `newFixedThreadPool(T)` para limitar as partidas simultâneas. Não limita:
+`submit()` num pool fixo **nunca bloqueia**, porque a fila interna do executor é
+ilimitada. O loop drenava a fila inteira num piscar de olhos e os pares
+excedentes ficavam parados dentro do executor.
+
+Medido com N=60, T=4: 30 partidas em voo em vez de 4, e a fila caindo de 60 para
+0 em menos de 25 ms — média de 1,4 jogador visível durante todo o torneio. Os 52
+jogadores restantes não estavam nem na fila nem na arena: estavam num terceiro
+estado invisível, dentro da fila do `ExecutorService`.
+
+**Decisão.** Um `Semaphore` com T permissões, criado em `Tournament`. O
+orquestrador faz `acquire()` **antes** de `dequeuePair()`; o `MatchRunner`
+devolve a permissão num `finally`, depois de o vencedor já estar de volta na
+fila.
+
+**Por quê.** O RF02 fala em *partidas simultâneas*, e o único jeito de o número
+ser verdade é segurar o pareamento, não o despacho. Adquirir antes de
+desenfileirar é o que preserva o invariante que a GUI depende: **todo jogador
+está ou na fila visível, ou numa das T partidas ativas** — nunca num limbo. Como
+efeito colateral bem-vindo, o semáforo é exatamente o que a nota do RF02 já
+previa para .NET (`SemaphoreSlim`), então as duas stacks passam a expressar T do
+mesmo jeito e o pool volta a ser só um provedor de threads.
+
+**Alternativas descartadas.** Pool com fila limitada + `CallerRunsPolicy` faria
+o orquestrador *jogar* a partida rejeitada, misturando os papéis de quem pareia
+e quem joga. `SynchronousQueue` com política de rejeição bloqueante resolve o
+número, mas esconde a intenção num detalhe de configuração do executor.
+
+**Consequência.** `MatchRunner` e `Orchestrator` ganham um parâmetro. Na
+inanição da fila o orquestrador segura uma vaga enquanto espera o par, então o
+paralelismo efetivo é T-1 nesse instante — sem perda real, porque não há dois
+jogadores disponíveis para preencher a vaga de qualquer forma. Verificado: T
+respeitado exatamente para T=1, 2, 4 e 8, e terminação sem deadlock em N/T
+extremos (N=2 T=8, N=3 T=1, N=500 T=64, N ímpar) e em 25 execuções repetidas.

@@ -1,4 +1,4 @@
-# Arquitetura
+﻿# Arquitetura
 
 Projeto: simulação de um torneio de pedra-papel-tesoura com concorrência real —
 cada partida roda em uma thread, uma fila única alimenta o torneio, e a GUI
@@ -87,11 +87,12 @@ class PlayerQueue                       // thread-safe (RNF02)
 
 class Orchestrator: Runnable            // thread propria, em loop
     loop:
+        slots.acquire()                 // RF02 / ADR-011: so pareia com vaga real
         pair = queue.dequeuePair()
-        if pair == null: break          // RF09
+        if pair == null: slots.release(); break   // RF09
         match = new Match(id++, pair)
         activeMatches.add(match)
-        pool.submit(new MatchRunner(match, ...))
+        pool.submit(new MatchRunner(match, ..., slots))
 
 class MatchRunner: Runnable             // uma das T threads do pool
     publish MatchStarted
@@ -101,10 +102,12 @@ class MatchRunner: Runnable             // uma das T threads do pool
     winner.win(); queue.eliminate(loser); queue.enqueue(winner)
     activeMatches.remove(match)
     publish MatchEnded, PlayerScored, PlayerEliminated, QueueChanged
+    finally: slots.release()            // ADR-011: vaga volta com o winner ja na fila
 
 class Tournament
     config: TournamentConfig(players, threads, roundDelayMs)
     queue, activeMatches (set thread-safe), pool = ExecutorService(T), bus
+    slots = Semaphore(T)                // ADR-011: limite de partidas simultaneas
     start() / stop() / isFinished() / champion()
 ```
 
@@ -124,6 +127,15 @@ par nunca se forma.
 
 Esta é a única fonte real de deadlock da arquitetura. Qualquer reimplementação
 precisa reproduzir os dois pontos: o contador `alive` e o sinal na eliminação.
+
+O semáforo `slots` ([ADR-011](decisoes.md#adr-011)) é o segundo ponto de espera
+do orquestrador e **não** acrescenta uma terceira. Ele é seguro porque quem
+devolve a vaga é o `MatchRunner`, que nunca precisa adquirir nada para terminar:
+não há espera circular. O `acquire()` vem *antes* do `dequeuePair()`, então na
+inanição da fila o orquestrador segura uma vaga enquanto espera — vaga que
+ninguém poderia usar de qualquer forma, já que formar par exige dois jogadores.
+O `release()` mora num `finally`: match interrompido devolve a vaga, senão as
+partidas simultâneas encolheriam a cada erro até o torneio parar de progredir.
 
 ### 3.2 Por que não `BlockingQueue`
 

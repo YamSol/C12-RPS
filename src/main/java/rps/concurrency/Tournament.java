@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 import rps.domain.Match;
 import rps.domain.Player;
@@ -41,8 +42,14 @@ public final class Tournament {
         });
         bus.publish(new Events.QueueChanged(queue.snapshot(), queue.alive()));
 
+        // RF02: T vagas de partida simultanea. E o semaforo — nao o tamanho do
+        // pool — que segura o orquestrador, mantendo na fila todo mundo que
+        // ainda nao tem thread pra jogar. Em .NET o equivalente e o
+        // SemaphoreSlim, entao as duas stacks passam a expressar T do mesmo jeito.
+        Semaphore slots = new Semaphore(config.threads());
+
         orchestratorThread = new Thread(
-                new Orchestrator(queue, pool, bus, activeMatches, config.roundDelayMs()),
+                new Orchestrator(queue, pool, bus, activeMatches, config.roundDelayMs(), slots),
                 "orchestrator");
         orchestratorThread.setDaemon(true);
         orchestratorThread.start();
