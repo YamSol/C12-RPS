@@ -3,6 +3,8 @@ package rps.concurrency;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import rps.domain.Match;
 import rps.domain.MatchResult;
@@ -19,54 +21,127 @@ public final class MatchRunner implements Runnable {
     private final Set<Match> activeMatches;
     private final long roundDelayMs;
 
-    public MatchRunner(Match match,
-                       PlayerQueue queue,
-                       EventBus bus,
-                       Set<Match> activeMatches,
-                       long roundDelayMs) {
+    // Estatísticas compartilhadas do torneio
+    private final AtomicLong totalMatchTimeNanos;
+    private final AtomicInteger matchesPlayed;
+
+    public MatchRunner(
+            Match match,
+            PlayerQueue queue,
+            EventBus bus,
+            Set<Match> activeMatches,
+            long roundDelayMs,
+            AtomicLong totalMatchTimeNanos,
+            AtomicInteger matchesPlayed
+    ) {
         this.match = match;
         this.queue = queue;
         this.bus = bus;
         this.activeMatches = activeMatches;
         this.roundDelayMs = roundDelayMs;
+        this.totalMatchTimeNanos = totalMatchTimeNanos;
+        this.matchesPlayed = matchesPlayed;
     }
 
     @Override
     public void run() {
+
+        // Marca o início desta partida
+        long matchStartTime = System.nanoTime();
+
         try {
             match.state(Match.State.RUNNING);
             bus.publish(new Events.MatchStarted(match));
 
             List<Round> rounds = new ArrayList<>();
+
             Round round;
+
             do {
                 Thread.sleep(roundDelayMs);
-                round = new Round(Move.random(), Move.random());
+
+                round = new Round(
+                        Move.random(),
+                        Move.random()
+                );
+
                 rounds.add(round);
+
                 match.lastRound(round);
-                bus.publish(new Events.RoundPlayed(match, round));
-            } while (round.isDraw()); // RF06: empate -> replay da mesma dupla
 
-            boolean p1Won = round.p1().beats(round.p2()) > 0;
-            Player winner = p1Won ? match.p1() : match.p2();
-            Player loser = p1Won ? match.p2() : match.p1();
+                bus.publish(
+                        new Events.RoundPlayed(match, round)
+                );
 
-            MatchResult result = new MatchResult(winner, loser, rounds);
+            } while (round.isDraw()); // empate -> replay da mesma dupla
+
+            boolean p1Won =
+                    round.p1().beats(round.p2()) > 0;
+
+            Player winner =
+                    p1Won ? match.p1() : match.p2();
+
+            Player loser =
+                    p1Won ? match.p2() : match.p1();
+
+            MatchResult result =
+                    new MatchResult(
+                            winner,
+                            loser,
+                            rounds
+                    );
+
             match.result(result);
             match.state(Match.State.DONE);
 
-            // Deixa o resultado visivel um instante antes de tirar o match da arena.
+            // Deixa o resultado visível por um instante
             Thread.sleep(roundDelayMs);
 
-            int score = winner.win();               // RF04
-            queue.eliminate(loser);                 // RF05
-            queue.enqueue(winner);                  // RF04
+            /*
+             * Calcula a duração ANTES de eliminar o jogador.
+             * Isso garante que a estatística esteja pronta
+             * antes que o Orchestrator perceba que o torneio acabou.
+             */
+            long matchTime =
+                    System.nanoTime() - matchStartTime;
+
+            totalMatchTimeNanos.addAndGet(matchTime);
+            matchesPlayed.incrementAndGet();
+
+            int score = winner.win();
+
+            queue.eliminate(loser);
+            queue.enqueue(winner);
+
             activeMatches.remove(match);
 
-            bus.publish(new Events.MatchEnded(match, result));
-            bus.publish(new Events.PlayerScored(winner, score));
-            bus.publish(new Events.PlayerEliminated(loser));
-            bus.publish(new Events.QueueChanged(queue.snapshot(), queue.alive()));
+            bus.publish(
+                    new Events.MatchEnded(
+                            match,
+                            result
+                    )
+            );
+
+            bus.publish(
+                    new Events.PlayerScored(
+                            winner,
+                            score
+                    )
+            );
+
+            bus.publish(
+                    new Events.PlayerEliminated(
+                            loser
+                    )
+            );
+
+            bus.publish(
+                    new Events.QueueChanged(
+                            queue.snapshot(),
+                            queue.aliveSnapshot()
+                    )
+            );
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

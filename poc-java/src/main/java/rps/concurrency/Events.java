@@ -7,7 +7,7 @@ import rps.domain.MatchResult;
 import rps.domain.Player;
 import rps.domain.Round;
 
-/** Os eventos que trafegam no {@link EventBus}. */
+/** Os eventos que trafegam no EventBus. */
 public final class Events {
 
     private Events() {
@@ -23,7 +23,26 @@ public final class Events {
 
     public record PlayerEliminated(Player player) { }
 
-    public record QueueChanged(List<Player> waiting, int alive) { }
+    /*
+     * waiting = quem está esperando partida.
+     * alivePlayers = todos que ainda estão vivos.
+     */
+    public record QueueChanged(
+            List<Player> waiting,
+            List<Player> alivePlayers
+    ) { }
 
-    public record TournamentEnded(Player champion) { }
+    /**
+     * Evento final do torneio.
+     *
+     * totalTimeNanos = duração total do torneio.
+     * totalMatchTimeNanos = soma da duração de todas as partidas.
+     * matchesPlayed = quantidade total de partidas.
+     */
+    public record TournamentEnded(
+            Player champion,
+            long totalTimeNanos,
+            long totalMatchTimeNanos,
+            int matchesPlayed
+    ) { }
 }

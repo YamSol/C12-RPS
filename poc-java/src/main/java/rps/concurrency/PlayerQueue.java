@@ -4,112 +4,163 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import rps.domain.Player;
 
 /**
- * Fila unica do torneio, thread-safe (RNF02).
+ * Fila única do torneio, thread-safe.
  *
- * <p>Alem da fila em si, guarda {@code alive} — quantos jogadores ainda nao
- * foram eliminados, contando os que estao dentro de um match. E esse contador
- * que decide o fim do torneio (RF09): {@code alive == 1}.
- *
- * <p>Escolha de projeto: ReentrantLock + Condition em vez de BlockingQueue,
- * porque a operacao primitiva aqui e "tire DOIS" (RF03) e nao "tire um" —
- * e porque a espera precisa ser interrompida quando o torneio acaba.
+ * waiting = jogadores esperando uma partida.
+ * alivePlayers = todos os jogadores ainda vivos,
+ * incluindo os que estão jogando.
  */
 public final class PlayerQueue {
 
     private final Deque<Player> waiting = new ArrayDeque<>();
+
+    // Guarda TODOS os jogadores ainda vivos
+    private final Set<Player> alivePlayers = new LinkedHashSet<>();
+
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition changed = lock.newCondition();
 
     private int alive;
 
     public PlayerQueue(Collection<Player> players) {
+
         waiting.addAll(players);
+        alivePlayers.addAll(players);
+
         alive = players.size();
     }
 
-    /** RF04: winner volta pro fim da fila. */
+    /** O vencedor volta para o fim da fila. */
     public void enqueue(Player player) {
         lock.lock();
+
         try {
             waiting.addLast(player);
             changed.signalAll();
+
         } finally {
             lock.unlock();
         }
     }
 
-    /** RF05: loser sai do universo — nao volta pra fila e some do contador. */
+    /** O perdedor é eliminado do torneio. */
     public void eliminate(Player player) {
         lock.lock();
+
         try {
-            alive--;
+
+            // Remove da lista de jogadores vivos
+            if (alivePlayers.remove(player)) {
+                alive--;
+            }
+
             changed.signalAll();
+
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * RF03: bloqueia ate haver 2 jogadores disponiveis.
-     *
-     * @return o par, ou {@code null} quando o torneio acabou (RF09) — nesse caso
-     *         o orchestrator deve encerrar seu loop.
+     * Espera até existirem dois jogadores disponíveis
+     * e remove os dois da fila.
      */
     public Player[] dequeuePair() throws InterruptedException {
         lock.lock();
+
         try {
+
             while (waiting.size() < 2) {
+
                 if (alive <= 1) {
                     return null;
                 }
+
                 changed.await();
             }
-            return new Player[] { waiting.pollFirst(), waiting.pollFirst() };
+
+            return new Player[]{
+                    waiting.pollFirst(),
+                    waiting.pollFirst()
+            };
+
         } finally {
             lock.unlock();
         }
     }
 
+    /** Quantos estão esperando uma partida. */
     public int size() {
         lock.lock();
+
         try {
             return waiting.size();
+
         } finally {
             lock.unlock();
         }
     }
 
+    /** Quantos ainda estão vivos no torneio. */
     public int alive() {
         lock.lock();
+
         try {
             return alive;
+
         } finally {
             lock.unlock();
         }
     }
 
-    /** Copia defensiva pra GUI ler sem segurar o lock enquanto desenha (RNF01). */
+    /** Jogadores que estão esperando para jogar. */
     public List<Player> snapshot() {
         lock.lock();
+
         try {
             return new ArrayList<>(waiting);
+
         } finally {
             lock.unlock();
         }
     }
 
-    /** O ultimo sobrevivente, quando houver um. */
+    /**
+     * TODOS os jogadores ainda vivos,
+     * inclusive os que estão jogando.
+     */
+    public List<Player> aliveSnapshot() {
+        lock.lock();
+
+        try {
+            return new ArrayList<>(alivePlayers);
+
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Retorna o último sobrevivente. */
     public Player champion() {
         lock.lock();
+
         try {
-            return alive == 1 && waiting.size() == 1 ? waiting.peekFirst() : null;
+
+            if (alivePlayers.size() == 1) {
+                return alivePlayers.iterator().next();
+            }
+
+            return null;
+
         } finally {
             lock.unlock();
         }

@@ -11,6 +11,6 @@ package rps.concurrency;
 public record TournamentConfig(int players, int threads, long roundDelayMs) {
 
     public static TournamentConfig defaults() {
-        return new TournamentConfig(60, 4, 350);
+        return new TournamentConfig(60, 1, 0);
     }
 }

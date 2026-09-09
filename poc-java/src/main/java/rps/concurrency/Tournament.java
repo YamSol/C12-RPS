@@ -6,6 +6,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import rps.domain.Match;
 import rps.domain.Player;
@@ -17,41 +19,96 @@ public final class Tournament {
     private final EventBus bus;
     private final PlayerQueue queue;
     private final List<Player> players;
-    private final Set<Match> activeMatches = ConcurrentHashMap.newKeySet();
+
+    private final Set<Match> activeMatches =
+            ConcurrentHashMap.newKeySet();
+
+    // Estatísticas compartilhadas
+    private final AtomicLong totalMatchTimeNanos =
+            new AtomicLong(0);
+
+    private final AtomicInteger matchesPlayed =
+            new AtomicInteger(0);
 
     private ExecutorService pool;
     private Thread orchestratorThread;
 
-    public Tournament(TournamentConfig config, EventBus bus) {
+    public Tournament(
+            TournamentConfig config,
+            EventBus bus
+    ) {
         this.config = config;
         this.bus = bus;
-        this.players = new ArrayList<>(config.players());
+
+        this.players =
+                new ArrayList<>(config.players());
+
         for (int i = 1; i <= config.players(); i++) {
             players.add(new Player(i));
         }
-        this.queue = new PlayerQueue(players);
+
+        this.queue =
+                new PlayerQueue(players);
     }
 
-    /** UC01. Retorna imediatamente: tudo acontece fora da UI thread (RNF01). */
+    /** UC01. Tudo acontece fora da UI thread. */
     public void start() {
-        pool = Executors.newFixedThreadPool(config.threads(), runnable -> {
-            Thread thread = new Thread(runnable, "match-worker");
-            thread.setDaemon(true);
-            return thread;
-        });
-        bus.publish(new Events.QueueChanged(queue.snapshot(), queue.alive()));
 
-        orchestratorThread = new Thread(
-                new Orchestrator(queue, pool, bus, activeMatches, config.roundDelayMs()),
-                "orchestrator");
+        // Marca o início real do torneio
+        long tournamentStartTime =
+                System.nanoTime();
+
+        totalMatchTimeNanos.set(0);
+        matchesPlayed.set(0);
+
+        pool = Executors.newFixedThreadPool(
+                config.threads(),
+                runnable -> {
+
+                    Thread thread =
+                            new Thread(
+                                    runnable,
+                                    "match-worker"
+                            );
+
+                    thread.setDaemon(true);
+
+                    return thread;
+                }
+        );
+
+        bus.publish(
+                new Events.QueueChanged(
+                        queue.snapshot(),
+                        queue.aliveSnapshot()
+                )
+        );
+
+        orchestratorThread =
+                new Thread(
+                        new Orchestrator(
+                                queue,
+                                pool,
+                                bus,
+                                activeMatches,
+                                config.roundDelayMs(),
+                                tournamentStartTime,
+                                totalMatchTimeNanos,
+                                matchesPlayed
+                        ),
+                        "orchestrator"
+                );
+
         orchestratorThread.setDaemon(true);
         orchestratorThread.start();
     }
 
     public void stop() {
+
         if (orchestratorThread != null) {
             orchestratorThread.interrupt();
         }
+
         if (pool != null) {
             pool.shutdownNow();
         }
@@ -59,7 +116,8 @@ public final class Tournament {
 
     /** RF09. */
     public boolean isFinished() {
-        return queue.alive() <= 1 && activeMatches.isEmpty();
+        return queue.alive() <= 1
+                && activeMatches.isEmpty();
     }
 
     public Player champion() {
