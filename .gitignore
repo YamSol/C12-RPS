@@ -2,3 +2,5 @@
 build/
 out/
 *.class
+mise.toml
+.claude/worktrees/
