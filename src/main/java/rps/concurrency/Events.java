@@ -25,5 +25,6 @@ public final class Events {
 
     public record QueueChanged(List<Player> waiting, int alive) { }
 
-    public record TournamentEnded(Player champion) { }
+    /** RF12: o campeao vem com os numeros do torneio ja fechados. */
+    public record TournamentEnded(Player champion, TournamentMetrics metrics) { }
 }

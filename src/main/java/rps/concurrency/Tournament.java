@@ -48,8 +48,12 @@ public final class Tournament {
         // SemaphoreSlim, entao as duas stacks passam a expressar T do mesmo jeito.
         Semaphore slots = new Semaphore(config.threads());
 
+        // RF12: o relogio do torneio comeca na construcao do TournamentStats,
+        // entao ele nasce aqui — o mais perto possivel da largada.
+        TournamentStats stats = new TournamentStats();
+
         orchestratorThread = new Thread(
-                new Orchestrator(queue, pool, bus, activeMatches, config.roundDelayMs(), slots),
+                new Orchestrator(queue, pool, bus, activeMatches, config.roundDelayMs(), slots, stats),
                 "orchestrator");
         orchestratorThread.setDaemon(true);
         orchestratorThread.start();

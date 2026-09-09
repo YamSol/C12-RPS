@@ -18,8 +18,34 @@ Versão 1.0 — consolidada a partir da issue #1 e revisada contra a PoC Java
 | RF09 | O torneio termina quando resta 1 jogador e não há matches ativos. | feito |
 | RF10 | A GUI reflete em tempo quase-real: entrada/saída da fila, matches iniciando e terminando. | feito (não executado — ver [decisoes.md](decisoes.md#adr-003)) |
 | RF11 | O layout da arena redivide o espaço automaticamente conforme o nº de matches ativos varia (1 → tela cheia; 2 → 50/50; N → grade de células iguais). | feito (não executado) |
+| RF12 | Ao final do torneio o sistema apresenta automaticamente o campeão e as métricas da execução: total de partidas, tempo total, tempo médio por partida e vazão (partidas/s). | feito |
 
 ### Notas
+
+**RF12 — a média por partida e o tempo total medem coisas diferentes.** Com
+`T > 1` as partidas correm em paralelo, então a soma das durações individuais
+passa do tempo de parede do torneio. A média serve para caracterizar uma
+partida (não deve mudar com `T`); a **vazão** é a métrica que reage a `T` e a
+que compara stacks. Medido em `N=32`, `roundDelayMs=50`: a média fica em ~86 ms
+de `T=1` a `T=16`, enquanto a vazão vai de 6,6 a 31,8 partidas/s (saturando em
+`T=16`, quando a fila deixa de alimentar 16 partidas simultâneas).
+
+As amostras são tiradas na origem — `MatchRunner` para a duração da partida,
+`Orchestrator` para o fechamento — nunca no assinante do `EventBus`, cujo
+`Platform::runLater` entraria na medida (RNF01). A pausa cosmética que mantém o
+resultado visível na arena fica **fora** da duração da partida.
+
+Fecha as issues [#5](https://github.com/YamSol/C12-RPS/issues/5) e
+[#10](https://github.com/YamSol/C12-RPS/issues/10). Ficou fora, por não pagar o
+custo na PoC: tempo de espera na fila com mediana e p95, que exigiria um mapa
+`Player -> instante` mantido sob o lock da `PlayerQueue`.
+
+**RF04 + RF05 são uma transação só.** `PlayerQueue.finishMatch()` elimina o
+perdedor e devolve o vencedor à fila sem soltar o lock no meio. Em dois passos
+separados (`eliminate()` + `enqueue()`) havia uma janela com `alive == 1` e o
+vencedor ainda fora da fila: o orquestrador que acordasse ali encerrava o
+torneio e `champion()` devolvia `null`. Reproduzido em ~1 de 2000 execuções com
+`N=8, T=4`; com a transação, 0 em 7000.
 
 **RF02 — "T threads" é específico de stack.** Em Java, T é literalmente o
 tamanho do `ExecutorService`, e a formulação original ("número de threads de

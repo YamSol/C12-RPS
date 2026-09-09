@@ -34,22 +34,21 @@ public final class PlayerQueue {
         alive = players.size();
     }
 
-    /** RF04: winner volta pro fim da fila. */
-    public void enqueue(Player player) {
+    /**
+     * RF04 + RF05 numa transacao so: o perdedor sai do contador e o vencedor
+     * volta pro fim da fila sem que o lock seja solto no meio.
+     *
+     * <p>Em dois passos separados havia uma janela em que {@code alive == 1}
+     * com o vencedor ainda fora da fila. O orquestrador que acordasse ali via
+     * {@code dequeuePair() == null}, encerrava o loop e publicava o fim do
+     * torneio com {@link #champion()} nulo — o campeao sumia da tela. Raro
+     * (~1 em 2000 com N=8, T=4), mas reproduzivel.
+     */
+    public void finishMatch(Player winner, Player loser) {
         lock.lock();
         try {
-            waiting.addLast(player);
-            changed.signalAll();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /** RF05: loser sai do universo — nao volta pra fila e some do contador. */
-    public void eliminate(Player player) {
-        lock.lock();
-        try {
-            alive--;
+            alive--;                    // RF05: o perdedor sai do universo
+            waiting.addLast(winner);    // RF04: o vencedor volta pro fim da fila
             changed.signalAll();
         } finally {
             lock.unlock();
