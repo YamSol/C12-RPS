@@ -1,5 +1,6 @@
 package rps;
 
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -7,6 +8,7 @@ import rps.concurrency.EventBus;
 import rps.concurrency.Events;
 import rps.concurrency.Tournament;
 import rps.concurrency.TournamentConfig;
+import rps.concurrency.TournamentMetrics;
 
 /**
  * Roda o torneio sem GUI, so pra provar que as camadas de dominio e
@@ -35,6 +37,14 @@ public final class HeadlessMain {
                         + " (" + event.result().rounds().size() + " rodada(s))"));
         bus.subscribe(Events.TournamentEnded.class, event -> {
             System.out.println("campeao: " + event.champion());
+            // RF12: as mesmas metricas da GUI, em uma linha tabulavel — e assim
+            // que se varre N/T sem abrir a tela.
+            TournamentMetrics m = event.metrics();
+            System.out.printf(Locale.ROOT,
+                    "metricas\tN=%d\tT=%d\tpartidas=%d\ttotal_ms=%d"
+                            + "\tmedia_partida_ms=%.1f\tpartidas_por_s=%.1f%n",
+                    players, threads, m.matches(), m.totalMillis(),
+                    m.avgMatchMillis(), m.matchesPerSecond());
             done.countDown();
         });
 

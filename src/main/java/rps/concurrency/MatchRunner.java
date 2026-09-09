@@ -20,23 +20,29 @@ public final class MatchRunner implements Runnable {
     private final Set<Match> activeMatches;
     private final long roundDelayMs;
     private final Semaphore slots;
+    private final TournamentStats stats;
 
     public MatchRunner(Match match,
                        PlayerQueue queue,
                        EventBus bus,
                        Set<Match> activeMatches,
                        long roundDelayMs,
-                       Semaphore slots) {
+                       Semaphore slots,
+                       TournamentStats stats) {
         this.match = match;
         this.queue = queue;
         this.bus = bus;
         this.activeMatches = activeMatches;
         this.roundDelayMs = roundDelayMs;
         this.slots = slots;
+        this.stats = stats;
     }
 
     @Override
     public void run() {
+        // RF12: o relogio da partida corre aqui, na thread que joga — a amostra
+        // nao pode sair do assinante do EventBus (RNF01).
+        long startedAtNanos = System.nanoTime();
         try {
             match.state(Match.State.RUNNING);
             bus.publish(new Events.MatchStarted(match));
@@ -59,12 +65,17 @@ public final class MatchRunner implements Runnable {
             match.result(result);
             match.state(Match.State.DONE);
 
+            // A partida termina aqui. A pausa logo abaixo e so cosmetica, entao
+            // fica fora da amostra pra nao inflar a media (RF12). Registrar
+            // antes do finishMatch tambem garante que a contagem ja esteja
+            // fechada quando o orquestrador perceber o fim do torneio.
+            stats.recordMatch(System.nanoTime() - startedAtNanos);
+
             // Deixa o resultado visivel um instante antes de tirar o match da arena.
             Thread.sleep(roundDelayMs);
 
             int score = winner.win();               // RF04
-            queue.eliminate(loser);                 // RF05
-            queue.enqueue(winner);                  // RF04
+            queue.finishMatch(winner, loser);       // RF04 + RF05, atomico
             activeMatches.remove(match);
 
             bus.publish(new Events.MatchEnded(match, result));

@@ -1,10 +1,13 @@
 package rps.ui;
 
+import java.util.Locale;
+
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
@@ -25,6 +28,8 @@ import rps.concurrency.EventBus;
 import rps.concurrency.Events;
 import rps.concurrency.Tournament;
 import rps.concurrency.TournamentConfig;
+import rps.concurrency.TournamentMetrics;
+import rps.domain.Player;
 
 /**
  * Camada de apresentacao. So subscreve eventos e desenha — nenhuma regra de
@@ -202,14 +207,49 @@ public final class MainApp extends Application {
             }
         });
         bus.subscribe(Events.MatchEnded.class, event -> arenaPanel.remove(event.match()));
-        // PlayerScored nao tem mais assinante na UI: a escala e fixa, entao nao
-        // ha o que renormalizar quando alguem pontua. O evento continua sendo
-        // publicado — as metricas da #5 vao precisar dele.
+        // PlayerScored continua sem assinante na UI: a escala e fixa, entao nao
+        // ha o que renormalizar quando alguem pontua, e as metricas do RF12 sao
+        // medidas na origem (MatchRunner), nao contadas aqui.
         bus.subscribe(Events.TournamentEnded.class, event -> { // UC06
+            // Reabilita os campos junto com o botao (#4) e so entao mostra o
+            // resultado (RF12) — o dialogo e nao-modal, mas a tela ja fica
+            // liberada pra proxima rodada de N e T antes de ele aparecer.
             setInputsDisabled(false);
-            status.setText(event.champion() == null
-                    ? "torneio encerrado"
-                    : "campeao: " + event.champion());
+            status.setText(summary(event.champion(), event.metrics()));
+            showResult(event.champion(), event.metrics());
         });
+    }
+
+    /** Linha compacta que fica na barra depois de o dialogo ser fechado. */
+    private String summary(Player champion, TournamentMetrics metrics) {
+        return String.format(Locale.ROOT,
+                "%s — %d partidas em %.2f s (%.1f partidas/s)",
+                champion == null ? "torneio encerrado" : "campeao: " + champion,
+                metrics.matches(),
+                metrics.totalMillis() / 1000.0,
+                metrics.matchesPerSecond());
+    }
+
+    /**
+     * UC06 / RF12: o resultado abre sozinho no fim do torneio. A apresentacao so
+     * formata — os numeros chegam prontos no evento.
+     */
+    private void showResult(Player champion, TournamentMetrics metrics) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Resultado do torneio");
+        alert.setHeaderText(champion == null
+                ? "Torneio encerrado sem campeao"
+                : "Campeao: jogador #" + champion.id()
+                        + " (" + champion.score() + " vitorias)");
+        alert.setContentText(String.format(Locale.ROOT,
+                "Partidas realizadas: %d%n"
+                        + "Tempo medio por partida: %.0f ms%n"
+                        + "Vazao: %.1f partidas/s%n"
+                        + "Tempo total do torneio: %.2f s",
+                metrics.matches(),
+                metrics.avgMatchMillis(),
+                metrics.matchesPerSecond(),
+                metrics.totalMillis() / 1000.0));
+        alert.show();
     }
 }
