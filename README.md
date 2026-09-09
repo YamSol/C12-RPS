@@ -1,5 +1,16 @@
 # NOTAS Projeto C12 - RPS
 
+## Documentação
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/arquitetura.md](docs/arquitetura.md) | Camadas, contrato do EventBus, armadilha de deadlock do desenho. |
+| [docs/requisitos.md](docs/requisitos.md) | RF01–RF11 e RNF01–RNF04 consolidados. |
+| [docs/casos-de-uso.md](docs/casos-de-uso.md) | UC01–UC07. |
+| [docs/decisoes.md](docs/decisoes.md) | ADRs, incluindo a escolha da stack e as 5 perguntas abertas do planejamento. |
+
+Stack decidida: **Java 21 + JavaFX** ([ADR-003](docs/decisoes.md#adr-003--stack-java-21--javafx)).
+
 ## Planejamento
 
 Ideação Inicial:
