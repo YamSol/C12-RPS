@@ -11,6 +11,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.TextFormatter;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
@@ -39,8 +41,10 @@ public final class MainApp extends Application {
     private final ArenaPanel arenaPanel = new ArenaPanel();
     private final ScaleLegend legend = new ScaleLegend();
     private final Label status = new Label("pronto");
-    private final Spinner<Integer> playersSpinner = new Spinner<>(2, 500, 60);
-    private final Spinner<Integer> threadsSpinner = new Spinner<>(1, 64, 4);
+    private final Spinner<Integer> playersSpinner = editableSpinner(
+            TournamentConfig.MIN_PLAYERS, TournamentConfig.MAX_PLAYERS, 60);
+    private final Spinner<Integer> threadsSpinner = editableSpinner(
+            TournamentConfig.MIN_THREADS, TournamentConfig.MAX_THREADS, 4);
     private final Button startButton = new Button("start");
 
     private Tournament tournament;
@@ -101,8 +105,69 @@ public final class MainApp extends Application {
         return label;
     }
 
+    /**
+     * Spinner que aceita o valor digitado (#4). Tres peças, todas necessarias:
+     * setEditable libera o teclado, o TextFormatter barra o que nao e digito
+     * antes de virar texto, e o listener de foco comita — sozinho, o Spinner do
+     * JavaFX so comita no Enter e descarta o resto em silencio.
+     */
+    private static Spinner<Integer> editableSpinner(int min, int max, int initial) {
+        Spinner<Integer> spinner = new Spinner<>(min, max, initial);
+        spinner.setEditable(true);
+
+        int maxDigits = Integer.toString(max).length();
+        spinner.getEditor().setTextFormatter(new TextFormatter<>(change ->
+                change.getControlNewText().matches("\\d{0," + maxDigits + "}") ? change : null));
+
+        spinner.getEditor().focusedProperty().addListener((observable, had, has) -> {
+            if (!has) {
+                commitEditor(spinner);
+            }
+        });
+        return spinner;
+    }
+
+    /**
+     * Le o texto do editor e devolve o valor efetivo, clampado na faixa. Vazio
+     * (o filtro ja garante que o resto e numerico) volta pro ultimo valor valido.
+     * Nunca lanca: o TournamentConfig rejeita valor fora da faixa, entao e aqui
+     * que a entrada tem que ficar boa.
+     */
+    private static void commitEditor(Spinner<Integer> spinner) {
+        SpinnerValueFactory.IntegerSpinnerValueFactory factory =
+                (SpinnerValueFactory.IntegerSpinnerValueFactory) spinner.getValueFactory();
+        String text = spinner.getEditor().getText().trim();
+
+        int value = text.isEmpty() ? factory.getValue() : Integer.parseInt(text);
+        int clamped = Math.max(factory.getMin(), Math.min(factory.getMax(), value));
+
+        factory.setValue(clamped);
+        spinner.getEditor().setText(Integer.toString(clamped));
+        flagCorrection(spinner, clamped != value || text.isEmpty());
+    }
+
+    /** Feedback visual: borda vermelha quando o que foi digitado nao virou o valor. */
+    private static void flagCorrection(Spinner<Integer> spinner, boolean corrected) {
+        spinner.getEditor().setStyle(corrected
+                ? "-fx-border-color: #e5534b; -fx-border-width: 1.5;"
+                : "");
+    }
+
+    /** Enquanto roda, mexer nos campos nao muda nada — TournamentConfig e lido uma vez. */
+    private void setInputsDisabled(boolean disabled) {
+        playersSpinner.setDisable(disabled);
+        threadsSpinner.setDisable(disabled);
+        startButton.setDisable(disabled);
+    }
+
     /** UC01. */
     private void startTournament() {
+        // Clicar em start nao tira o foco do editor, entao o valor digitado
+        // ainda nao esta comitado — comitar aqui e o que faz o torneio comecar
+        // com o que esta na tela, e nao com o valor anterior.
+        commitEditor(playersSpinner);
+        commitEditor(threadsSpinner);
+
         if (tournament != null) {
             tournament.stop();
         }
@@ -124,7 +189,7 @@ public final class MainApp extends Application {
 
         tournament = new Tournament(config, bus);
 
-        startButton.setDisable(true);
+        setInputsDisabled(true);
         status.setText("torneio rodando — N=" + config.players() + " T=" + config.threads());
         tournament.start();
     }
@@ -146,7 +211,10 @@ public final class MainApp extends Application {
         // ha o que renormalizar quando alguem pontua, e as metricas do RF12 sao
         // medidas na origem (MatchRunner), nao contadas aqui.
         bus.subscribe(Events.TournamentEnded.class, event -> { // UC06
-            startButton.setDisable(false);
+            // Reabilita os campos junto com o botao (#4) e so entao mostra o
+            // resultado (RF12) — o dialogo e nao-modal, mas a tela ja fica
+            // liberada pra proxima rodada de N e T antes de ele aparecer.
+            setInputsDisabled(false);
             status.setText(summary(event.champion(), event.metrics()));
             showResult(event.champion(), event.metrics());
         });
