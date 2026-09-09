@@ -35,6 +35,14 @@ dentro do executor. Quem limita hoje é um `Semaphore(T)` segurando o
 pareamento; o pool ficou só como provedor de threads — o que aproxima a stack
 Java da formulação que o .NET exigiria. Ver [ADR-011](decisoes.md#adr-011).
 
+**RF07 — determinística *e* estável.** "Função determinística do score" era
+verdade na primeira versão só dentro de um instante: a escala se renormalizava a
+cada `PlayerScored`, então o mesmo score mudava de cor ao longo do torneio.
+Hoje a escala é discreta e fixada no start, com `ceil(log2(N)) + 2` níveis — a
+cor de um score não muda enquanto o torneio roda. Ver
+[ADR-012](decisoes.md#adr-012); a legenda que torna a escala legível é a
+[#15](https://github.com/YamSol/C12-RPS/issues/15).
+
 **RF06 — empate é por rodada, não por partida.** Uma partida é uma sequência de
 rodadas que só termina quando uma delas é decidida; o histórico completo fica em
 `MatchResult.rounds`. Ver [ADR-004](decisoes.md#adr-004).

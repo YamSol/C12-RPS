@@ -22,14 +22,18 @@ import rps.domain.Round;
 public final class MatchView extends VBox {
 
     private final Match match;
+    private final ColorScale scale;
     private final VBox left = new VBox();
     private final VBox right = new VBox();
+    private final Label leftName = new Label();
+    private final Label rightName = new Label();
     private final Label leftMove = new Label("...");
     private final Label rightMove = new Label("...");
     private final Label title = new Label();
 
-    public MatchView(Match match, int maxScore) {
+    public MatchView(Match match, ColorScale scale) {
         this.match = match;
+        this.scale = scale;
         setSpacing(4);
         setPadding(new Insets(6));
 
@@ -41,21 +45,21 @@ public final class MatchView extends VBox {
         HBox.setHgrow(left, Priority.ALWAYS);
         HBox.setHgrow(right, Priority.ALWAYS);
         VBox.setVgrow(arena, Priority.ALWAYS);
-        arena.getChildren().addAll(side(left, match.p1(), leftMove), side(right, match.p2(), rightMove));
+        arena.getChildren().addAll(
+                side(left, match.p1(), leftName, leftMove),
+                side(right, match.p2(), rightName, rightMove));
 
         getChildren().addAll(title, arena);
-        refresh(maxScore);
+        refresh();
     }
 
-    private VBox side(VBox box, rps.domain.Player player, Label moveLabel) {
+    private VBox side(VBox box, rps.domain.Player player, Label nameLabel, Label moveLabel) {
         box.setAlignment(Pos.CENTER);
         box.setSpacing(2);
-        Label name = new Label(player.toString());
-        name.setFont(Font.font(13));
-        name.setTextFill(Color.web("#101318"));
+        nameLabel.setText(player.toString());
+        nameLabel.setFont(Font.font(13));
         moveLabel.setFont(Font.font(11));
-        moveLabel.setTextFill(Color.web("#101318"));
-        box.getChildren().addAll(name, moveLabel);
+        box.getChildren().addAll(nameLabel, moveLabel);
         HBox.setHgrow(box, Priority.ALWAYS);
         box.setMaxWidth(Double.MAX_VALUE);
         box.setMaxHeight(Double.MAX_VALUE);
@@ -63,9 +67,9 @@ public final class MatchView extends VBox {
     }
 
     /** Repinta a partir do estado atual do match. Chamado sempre na UI thread. */
-    public void refresh(int maxScore) {
-        paint(left, match.p1().score(), maxScore);
-        paint(right, match.p2().score(), maxScore);
+    public void refresh() {
+        paint(left, leftName, leftMove, match.p1().score());
+        paint(right, rightName, rightMove, match.p2().score());
 
         Round round = match.lastRound();
         leftMove.setText(round == null ? "..." : round.p1().name());
@@ -87,9 +91,13 @@ public final class MatchView extends VBox {
         (p1Won ? right : left).setOpacity(0.25);
     }
 
-    private void paint(VBox box, int score, int maxScore) {
-        Color color = ColorMapper.scoreToColor(score, maxScore);
-        box.setBackground(new Background(new BackgroundFill(color, new CornerRadii(6), Insets.EMPTY)));
+    private void paint(VBox box, Label nameLabel, Label moveLabel, int score) {
+        box.setBackground(new Background(new BackgroundFill(
+                scale.colorFor(score), new CornerRadii(6), Insets.EMPTY)));
+        // O texto acompanha o nivel: a rampa tem ponta escura e ponta clara.
+        Color texto = scale.textOn(score);
+        nameLabel.setTextFill(texto);
+        moveLabel.setTextFill(texto);
     }
 
     public Match match() {

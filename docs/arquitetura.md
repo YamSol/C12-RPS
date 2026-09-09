@@ -194,7 +194,8 @@ MainApp       // monta a janela, assina o bus, cria o Tournament
 QueuePanel    // fila viva; redesenha em QueueChanged
 ArenaPanel    // grade de MatchView; redivide o espaco (RF11)
 MatchView     // um match: dois retangulos coloridos + jogadas do ultimo round
-ColorMapper   // score -> cor, gradiente de matiz frio->quente
+ColorScale    // score -> cor, escala discreta fixada no start (ADR-012)
+ScaleLegend   // o mapa cor -> score exibido na UI
 ```
 
 `ArenaPanel` implementa o RF11 escolhendo a grade quadrada mais próxima:
@@ -203,7 +204,14 @@ ColorMapper   // score -> cor, gradiente de matiz frio->quente
 inteira, 2 ficam 50/50, 4 viram 2×2. O relayout roda a cada `MatchStarted` e
 `MatchEnded` (UC05).
 
-`ColorMapper` mapeia `score / maxScore` em matiz, do frio (0) ao quente
-(`maxScore`) — o mapa de calor previsto no RF07. `maxScore` é o maior score vivo
-no momento, então a escala se reajusta conforme o torneio avança e todos os
-matches são repintados junto.
+`ColorScale` implementa o RF07 como escala **discreta e fixa**: o número de
+níveis sai de `ceil(log2(N)) + 2` no momento do start e não muda mais; cada
+ponto de score usa um nível, e quem passa do topo satura no último. A rampa é o
+Viridis, monotônico em luminância — o texto sobre cada nível alterna entre claro
+e escuro conforme a luminância, porque a rampa tem uma ponta quase preta e outra
+quase branca. Ver [ADR-012](decisoes.md#adr-012).
+
+A escala é passada uma vez para `QueuePanel`, `ArenaPanel` e `ScaleLegend` no
+start (`MainApp.startTournament`), em vez de viajar como parâmetro em cada
+chamada de desenho. É por isso que `update()`, `add()` e `refresh()` não recebem
+mais nada sobre cor: não há o que renormalizar durante o torneio.

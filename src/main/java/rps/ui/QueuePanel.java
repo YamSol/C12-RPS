@@ -21,6 +21,9 @@ public final class QueuePanel extends VBox {
     private final Label header = new Label("fila");
     private final FlowPane chips = new FlowPane(4, 4);
 
+    /** Fixa no start (ADR-012); o default so evita NPE antes do primeiro torneio. */
+    private ColorScale scale = ColorScale.forPlayers(2);
+
     public QueuePanel() {
         setSpacing(6);
         setPadding(new Insets(10));
@@ -32,22 +35,26 @@ public final class QueuePanel extends VBox {
         getChildren().addAll(header, chips);
     }
 
-    public void update(List<Player> waiting, int alive, int maxScore) {
+    public void scale(ColorScale scale) {
+        this.scale = scale;
+    }
+
+    public void update(List<Player> waiting, int alive) {
         header.setText("fila: " + waiting.size() + "   vivos: " + alive);
         chips.getChildren().clear();
         for (Player player : waiting) {
-            chips.getChildren().add(chip(player, maxScore));
+            chips.getChildren().add(chip(player));
         }
     }
 
-    private Label chip(Player player, int maxScore) {
+    private Label chip(Player player) {
         Label label = new Label(String.valueOf(player.id()));
         label.setPrefSize(28, 28);
         label.setAlignment(Pos.CENTER);
         label.setFont(Font.font(11));
-        label.setTextFill(Color.web("#101318"));
+        label.setTextFill(scale.textOn(player.score()));
         label.setBackground(new Background(new BackgroundFill(
-                ColorMapper.scoreToColor(player.score(), maxScore), new CornerRadii(14), Insets.EMPTY)));
+                scale.colorFor(player.score()), new CornerRadii(14), Insets.EMPTY)));
         return label;
     }
 }
