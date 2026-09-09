@@ -30,6 +30,12 @@ que compara stacks. Medido em `N=32`, `roundDelayMs=50`: a média fica em ~86 ms
 de `T=1` a `T=16`, enquanto a vazão vai de 6,6 a 31,8 partidas/s (saturando em
 `T=16`, quando a fila deixa de alimentar 16 partidas simultâneas).
 
+**RF12 — o resultado é um painel, não uma janela.** O `ResultPanel` entra no
+lugar da `ArenaPanel`, no centro da própria janela, quando o torneio acaba, e
+sai quando o próximo começa. A arena está vazia nesse momento, então a troca
+não esconde nada; e sem diálogo para fechar, variar `N` e `T` em sequência —
+o uso principal da tela — não passa por um clique extra a cada rodada.
+
 As amostras são tiradas na origem — `MatchRunner` para a duração da partida,
 `Orchestrator` para o fechamento — nunca no assinante do `EventBus`, cujo
 `Platform::runLater` entraria na medida (RNF01). A pausa cosmética que mantém o

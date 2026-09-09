@@ -50,7 +50,7 @@ estado compartilhado — recebe eventos já marshalados para a UI thread.
 |---|---|---|
 | Domínio | `rps.domain` | `Move`, `Player`, `Round`, `MatchResult`, `Match` |
 | Concorrência | `rps.concurrency` | `PlayerQueue`, `EventBus`, `Events`, `Orchestrator`, `MatchRunner`, `Tournament`, `TournamentConfig` |
-| Apresentação | `rps.ui` | `MainApp`, `QueuePanel`, `ArenaPanel`, `MatchView`, `ColorMapper`, `Launcher` |
+| Apresentação | `rps.ui` | `MainApp`, `QueuePanel`, `ArenaPanel`, `MatchView`, `ResultPanel`, `ColorScale`, `ScaleLegend`, `Launcher` |
 
 O domínio não importa `javafx.*` nem `java.util.concurrent.*`. A concorrência
 não importa `javafx.*`: o único acoplamento com a GUI é o `Executor` passado ao

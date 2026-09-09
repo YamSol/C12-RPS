@@ -103,8 +103,11 @@ tamanho.
 1. `dequeuePair()` devolve `null`; o loop do orquestrador encerra.
 2. Orquestrador desliga o pool, fecha as contas em `TournamentStats.snapshot()`
    e publica `TournamentEnded` com o campeão e as `TournamentMetrics`.
-3. GUI abre sozinha o resultado — campeão, total de partidas, tempo médio por
-   partida, vazão e tempo total — e para de aceitar novos eventos de partida.
+3. GUI troca a arena — vazia nesse ponto — pelo painel de resultado: campeão,
+   total de partidas, tempo médio por partida, vazão e tempo total. Sem janela
+   separada; os controles de `N` e `T` continuam acessíveis ao lado.
+4. Um novo *start* devolve a arena ao centro (UC01), e o fim do torneio
+   seguinte traz o painel de volta com os números novos.
 
 **Pós-condição:** todas as threads encerradas, campeão e métricas em tela.
 **Requisitos:** RF09, RF12.

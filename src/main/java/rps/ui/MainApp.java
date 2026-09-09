@@ -7,7 +7,6 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
@@ -39,6 +38,7 @@ public final class MainApp extends Application {
 
     private final QueuePanel queuePanel = new QueuePanel();
     private final ArenaPanel arenaPanel = new ArenaPanel();
+    private final ResultPanel resultPanel = new ResultPanel();
     private final ScaleLegend legend = new ScaleLegend();
     private final Label status = new Label("pronto");
     private final Spinner<Integer> playersSpinner = editableSpinner(
@@ -47,11 +47,13 @@ public final class MainApp extends Application {
             TournamentConfig.MIN_THREADS, TournamentConfig.MAX_THREADS, 4);
     private final Button startButton = new Button("start");
 
+    /** Guardado porque o centro alterna entre arena e resultado (UC06). */
+    private final BorderPane root = new BorderPane();
+
     private Tournament tournament;
 
     @Override
     public void start(Stage stage) {
-        BorderPane root = new BorderPane();
         root.setTop(controls());
         root.setLeft(leftColumn());
         root.setCenter(arenaPanel);
@@ -185,7 +187,12 @@ public final class MainApp extends Application {
         ColorScale scale = ColorScale.forPlayers(config.players());
         queuePanel.scale(scale);
         arenaPanel.scale(scale);
+        resultPanel.scale(scale);
         legend.show(scale);
+
+        // Se o centro ainda mostra o resultado do torneio anterior, a arena
+        // volta aqui: cada start reabre a tela dos jogos.
+        root.setCenter(arenaPanel);
 
         tournament = new Tournament(config, bus);
 
@@ -211,16 +218,18 @@ public final class MainApp extends Application {
         // ha o que renormalizar quando alguem pontua, e as metricas do RF12 sao
         // medidas na origem (MatchRunner), nao contadas aqui.
         bus.subscribe(Events.TournamentEnded.class, event -> { // UC06
-            // Reabilita os campos junto com o botao (#4) e so entao mostra o
-            // resultado (RF12) — o dialogo e nao-modal, mas a tela ja fica
-            // liberada pra proxima rodada de N e T antes de ele aparecer.
+            // Reabilita os campos junto com o botao (#4) e troca a arena — ja
+            // vazia — pelo resultado (RF12). Sem janela: os controles de N e T
+            // continuam a um clique, entao a proxima rodada nao passa por
+            // fechar nada.
             setInputsDisabled(false);
             status.setText(summary(event.champion(), event.metrics()));
-            showResult(event.champion(), event.metrics());
+            resultPanel.show(event.champion(), event.metrics());
+            root.setCenter(resultPanel);
         });
     }
 
-    /** Linha compacta que fica na barra depois de o dialogo ser fechado. */
+    /** Linha compacta na barra de baixo; o painel do centro tem o detalhe. */
     private String summary(Player champion, TournamentMetrics metrics) {
         return String.format(Locale.ROOT,
                 "%s — %d partidas em %.2f s (%.1f partidas/s)",
@@ -228,28 +237,5 @@ public final class MainApp extends Application {
                 metrics.matches(),
                 metrics.totalMillis() / 1000.0,
                 metrics.matchesPerSecond());
-    }
-
-    /**
-     * UC06 / RF12: o resultado abre sozinho no fim do torneio. A apresentacao so
-     * formata — os numeros chegam prontos no evento.
-     */
-    private void showResult(Player champion, TournamentMetrics metrics) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Resultado do torneio");
-        alert.setHeaderText(champion == null
-                ? "Torneio encerrado sem campeao"
-                : "Campeao: jogador #" + champion.id()
-                        + " (" + champion.score() + " vitorias)");
-        alert.setContentText(String.format(Locale.ROOT,
-                "Partidas realizadas: %d%n"
-                        + "Tempo medio por partida: %.0f ms%n"
-                        + "Vazao: %.1f partidas/s%n"
-                        + "Tempo total do torneio: %.2f s",
-                metrics.matches(),
-                metrics.avgMatchMillis(),
-                metrics.matchesPerSecond(),
-                metrics.totalMillis() / 1000.0));
-        alert.show();
     }
 }
