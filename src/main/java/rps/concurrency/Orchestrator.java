@@ -26,6 +26,7 @@ public final class Orchestrator implements Runnable {
     private final Set<Match> activeMatches;
     private final long roundDelayMs;
     private final Semaphore slots;
+    private final TournamentStats stats;
 
     private int nextMatchId = 1;
 
@@ -34,13 +35,15 @@ public final class Orchestrator implements Runnable {
                         EventBus bus,
                         Set<Match> activeMatches,
                         long roundDelayMs,
-                        Semaphore slots) {
+                        Semaphore slots,
+                        TournamentStats stats) {
         this.queue = queue;
         this.pool = pool;
         this.bus = bus;
         this.activeMatches = activeMatches;
         this.roundDelayMs = roundDelayMs;
         this.slots = slots;
+        this.stats = stats;
     }
 
     @Override
@@ -61,7 +64,8 @@ public final class Orchestrator implements Runnable {
                 bus.publish(new Events.QueueChanged(queue.snapshot(), queue.alive()));
                 try {
                     // A vaga passa a ser do MatchRunner, que a devolve ao terminar.
-                    pool.submit(new MatchRunner(match, queue, bus, activeMatches, roundDelayMs, slots));
+                    pool.submit(new MatchRunner(
+                            match, queue, bus, activeMatches, roundDelayMs, slots, stats));
                 } catch (RejectedExecutionException e) {
                     slots.release(); // pool ja em shutdown (stop()): ninguem vai devolver por nos
                     break;
@@ -71,7 +75,9 @@ public final class Orchestrator implements Runnable {
             Thread.currentThread().interrupt();
         } finally {
             pool.shutdown();
-            bus.publish(new Events.TournamentEnded(queue.champion()));
+            // RF12: fechar as contas aqui, na thread do orquestrador, e nao no
+            // assinante — o evento sai com os numeros ja prontos.
+            bus.publish(new Events.TournamentEnded(queue.champion(), stats.snapshot()));
         }
     }
 }

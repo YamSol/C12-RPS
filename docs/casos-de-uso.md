@@ -101,11 +101,13 @@ tamanho.
 **Pré-condição:** `alive == 1` e nenhum match ativo.
 
 1. `dequeuePair()` devolve `null`; o loop do orquestrador encerra.
-2. Orquestrador desliga o pool e publica `TournamentEnded` com o campeão.
-3. GUI exibe o campeão e para de aceitar novos eventos de partida.
+2. Orquestrador desliga o pool, fecha as contas em `TournamentStats.snapshot()`
+   e publica `TournamentEnded` com o campeão e as `TournamentMetrics`.
+3. GUI abre sozinha o resultado — campeão, total de partidas, tempo médio por
+   partida, vazão e tempo total — e para de aceitar novos eventos de partida.
 
-**Pós-condição:** todas as threads encerradas, campeão em tela.
-**Requisitos:** RF09.
+**Pós-condição:** todas as threads encerradas, campeão e métricas em tela.
+**Requisitos:** RF09, RF12.
 
 ---
 
