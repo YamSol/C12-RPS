@@ -11,9 +11,9 @@ package rps.concurrency;
 public record TournamentConfig(int players, int threads, long roundDelayMs) {
 
     public static final int MIN_PLAYERS = 2;
-    public static final int MAX_PLAYERS = 500;
+    public static final int MAX_PLAYERS = 10000;
     public static final int MIN_THREADS = 1;
-    public static final int MAX_THREADS = 64;
+    public static final int MAX_THREADS = 500;
 
     /**
      * As faixas moram aqui, e nao no Spinner: a UI e so mais um cliente do
