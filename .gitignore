@@ -4,3 +4,5 @@ out/
 *.class
 mise.toml
 .claude/worktrees/
+
+resultados.csv
